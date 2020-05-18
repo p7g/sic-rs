@@ -36,24 +36,6 @@ fn error<S: AsRef<str>>(msg: S) {
     }
 }
 
-fn dial(host: &str, port: u16) -> net::TcpStream {
-    match net::TcpStream::connect((host, port)) {
-        Ok(stream) => stream,
-        Err(_) => {
-            error(format!("Failed to connect to host: '{}'", host));
-            std::process::exit(1);
-        }
-    }
-}
-
-fn user() -> Option<String> {
-    match env::var("USER") {
-        Ok(name) => Some(name),
-        Err(env::VarError::NotPresent) => None,
-        Err(env::VarError::NotUnicode(invalid)) => Some(invalid.to_string_lossy().to_string()),
-    }
-}
-
 fn print_message(in_channel: &str, message: &str) {
     let mut buf: [u8; 80] = [0; 80];
     let time_str = unsafe {
@@ -79,7 +61,12 @@ fn usage() {
 }
 
 fn main() -> io::Result<()> {
-    let mut nick = user().unwrap_or_else(|| "unknown".to_string());
+    let mut nick = match env::var("USER") {
+        Ok(name) => Some(name),
+        Err(env::VarError::NotPresent) => None,
+        Err(env::VarError::NotUnicode(invalid)) => Some(invalid.to_string_lossy().to_string()),
+    }
+    .unwrap_or_else(|| "unknown".to_string());
     let mut host = DEFAULT_HOST.to_string();
     let mut port = DEFAULT_PORT;
     let mut password = None;
@@ -94,9 +81,9 @@ fn main() -> io::Result<()> {
 
         if arg.starts_with('-') {
             match &arg[1..] {
-                "n" | "-nick" => with_arg! { |arg|
-                    nick = arg;
-                },
+                "k" | "-keyword" => with_arg! { |arg| password = Some(arg); },
+                "n" | "-nick" => with_arg! { |arg| nick = arg; },
+                "h" | "-host" => with_arg! { |arg| host = arg; },
                 "p" | "-port" => with_arg! { |arg|
                     if let Ok(p) = arg.parse() {
                         port = p;
@@ -104,13 +91,6 @@ fn main() -> io::Result<()> {
                         error("Invalid port");
                     }
                 },
-                "h" | "-host" => with_arg! { |arg|
-                        host = arg;
-                },
-                "k" | "-keyword" => with_arg! { |arg|
-                    password = Some(arg);
-                },
-
                 _ => usage(),
             }
         }
@@ -143,7 +123,13 @@ impl<'a> Sic<'a> {
     }
 
     fn connect(&mut self) -> io::Result<()> {
-        let socket = dial(self.host, self.port);
+        let socket = match net::TcpStream::connect((self.host, self.port)) {
+            Ok(stream) => stream,
+            Err(_) => {
+                error(format!("Failed to connect to host: '{}'", self.host));
+                std::process::exit(1);
+            }
+        };
         socket.set_nonblocking(true)?;
         self.socket.replace(socket);
         Ok(())
