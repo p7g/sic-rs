@@ -178,16 +178,20 @@ impl<'a> Sic<'a> {
                     "l" | "leave" => {
                         let current_channel = self.current_channel.as_ref().map(|s| s.as_ref());
                         let channel_to_leave = parts.get(1).cloned().or(current_channel);
-                        let parting_message =
-                            parts.get(2).cloned().unwrap_or(DEFAULT_PARTING_MESSAGE);
+                        let parting_message = parts.get(2..).unwrap_or(&[DEFAULT_PARTING_MESSAGE]);
                         if let Some(channel_to_leave) = channel_to_leave {
-                            write!(srv, "PART {} :{}\r\n", channel_to_leave, parting_message)?;
+                            write!(
+                                srv,
+                                "PART {} :{}\r\n",
+                                channel_to_leave,
+                                parting_message.join(" ")
+                            )?;
                         } else {
                             eprintln!("Not in a channel");
                         }
                     }
                     "m" | "message" => {
-                        if parts.len() != 3 {
+                        if parts.len() < 3 {
                             eprintln!("Invalid message syntax");
                         } else {
                             let dest = parts[1];
@@ -288,7 +292,6 @@ impl<'a> Sic<'a> {
                 self.nick, self.host, self.nick
             )?;
 
-            // unbuffered
             let mut stdin = BufReader::new(unsafe { File::from_raw_fd(0) });
             let srv_fd = srv_write.try_clone()?.into_raw_fd();
             let mut srv = unsafe { File::from_raw_fd(srv_fd) };
